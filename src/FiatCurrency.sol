@@ -10,12 +10,14 @@ contract FiatCurrency is ERC1155, ERC1155Holder {
     ///////////////////
     // State Variables
     ///////////////////
-    uint256 private tokenCounter;
-      Currency[] private CurrencyList;
-    /// @notice returns short form URL to fiat value
-    /// @dev stores the shortform url to a fiat struct
-    mapping(bytes32 => Currency) NameToFiat;
 
+    uint256 private tokenCounter;
+    Currency[] private CurrencyList;
+    /// @notice returns currency struct
+    /// @dev this is a mapping of the byte representation of the short form
+    /// to the currency struct
+    mapping(bytes32 => Currency) NameToFiat;
+    mapping (address => uint256) LockUpAmount;
     function supportsInterface(bytes4 interfaceId)
         public
         view
@@ -39,28 +41,49 @@ contract FiatCurrency is ERC1155, ERC1155Holder {
 
     function create(string memory name, string memory shortForm, string memory imageUri) external {
         tokenCounter = GetTokenCounter() + 1;
-        Currency memory currency = Currency(name, shortForm, imageUri,tokenCounter);
+        Currency memory currency = Currency(name, shortForm, imageUri, tokenCounter);
         CurrencyList.push(currency);
         bytes32 key = keccak256(abi.encodePacked(shortForm));
-        NameToFiat[key]=currency;
+        NameToFiat[key] = currency;
     }
     //mint more of that currency
-    function mintCurrency(uint256 tokenId, uint256 amount, address user) external {  
-        _mint(user, tokenId, amount,"");
+
+    function mintCurrency(string memory shortForm, uint256 amount, address user) external {
+        bytes32 key = keccak256(abi.encodePacked(shortForm));
+        Currency memory currency = NameToFiat[key];
+
+        _mint(user, currency.TokenId, amount, "");
         _setApprovalForAll(user, address(this), true);
     }
-     function burnCurrency(uint256 tokenId, uint256 amount, address user) external {  
-        _burn(user, tokenId, amount);
+
+    function burnCurrency(string memory shortForm, uint256 amount, address user) external {
+
+        bytes32 key = keccak256(abi.encodePacked(shortForm));
+        Currency memory currency = NameToFiat[key];
+        _burn(user, currency.TokenId, amount);
+    }
+    function LockUp(address user, string memory shortForm, uint256 amount) external {
+        // check how much the user has
+        bytes32 key = getKey(shortForm);
+        Currency memory currency = NameToFiat[key];
+        uint256 userBalance = balanceOf(user, currency.TokenId);
+        require(amount>=userBalance, "User does not have up to that amount");
+        LockUpAmount[user] = amount;
     }
 
     //Burn from that currency
     //get total volume for each curency
     function GetTokenCounter() public view returns (uint256) {
-		return tokenCounter;
-	}
-    function getUserBalance(string memory shortForm,address user) external view returns(uint256) {
+        return tokenCounter;
+    }
+
+    function getUserBalance(string memory shortForm, address user) external view returns (uint256) {
         bytes32 key = keccak256(abi.encodePacked(shortForm));
         Currency memory currency = NameToFiat[key];
         return balanceOf(user, currency.TokenId);
     }
+    function getKey(string memory shortForm) private pure returns (bytes32) {
+         return keccak256(abi.encodePacked(shortForm));
+    }
+    //Learn override key word din solidity
 }
